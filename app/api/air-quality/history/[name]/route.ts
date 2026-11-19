@@ -2,7 +2,12 @@ import { NextResponse, NextRequest } from "next/server";
 
 import connection from "@/app/lib/db";
 
-export async function GET(request: Request, { params }: { params: { name: string } }) {
+export async function GET(
+  request: Request,
+  { params }: { params: Promise<{ name: string }> }
+) {
+  const { name } = await params;
+
   try {
     const [hours] = await connection.query(
       `SELECT 
@@ -23,8 +28,9 @@ FROM
 JOIN 
     location ON city_air_quality_history.location_id = location.name 
 WHERE
-    location.name = ${params.name} 
-    AND city_air_quality_history.updated > NOW() - INTERVAL 48 HOUR;`
+    location.name = ${name}
+    AND city_air_quality_history.updated > NOW() - INTERVAL 48 HOUR
+ORDER BY city_air_quality_history.updated ASC;`
     );
 
 	 const [month] = await connection.query(
@@ -47,8 +53,9 @@ FROM
 JOIN 
     location ON city_air_quality_history.location_id = location.name 
 WHERE 
-    location.name = ${params.name} 
-    AND city_air_quality_history.updated > NOW() - INTERVAL 1 MONTH`
+    location.name = ${name}
+    AND city_air_quality_history.updated > NOW() - INTERVAL 1 MONTH
+ORDER BY city_air_quality_history.updated ASC;`
    );
 
     return NextResponse.json({ hours, month });

@@ -1,160 +1,85 @@
 import { NextResponse } from "next/server";
 
-// Simplified activation functions
-const relu = (x: number) => Math.max(0, x);
+type Observation = {
+  aqi: number;
+  timestamp: number;
+};
 
-function normalizeData(data: number[]): number[] {
-  const max = Math.max(...data);
-  const min = Math.min(...data);
-  return data.map((value) => (value - min) / (max - min));
-}
-
-// Class for the custom Neural Network with a hidden layer
-class NeuralNetwork {
-  private weightsHidden: number[][]; // Ваги між входом і прихованим шаром
-  private biasesHidden: number[]; // Зсуви для прихованого шару
-  private weightsOutput: number[][]; // Ваги між прихованим шаром і виходом
-  private biasesOutput: number[]; // Зсуви для виходу
-
-  constructor(inputSize: number, hiddenSize: number, outputSize: number) {
-    // Ініціалізація вагів для входу -> прихований шар
-    this.weightsHidden = Array.from({ length: inputSize }, () =>
-      Array.from({ length: hiddenSize }, () => Math.random() * 0.01 - 0.005)
-    );
-    this.biasesHidden = Array.from(
-      { length: hiddenSize },
-      () => Math.random() * 0.01 - 0.005
-    );
-
-    // Ініціалізація вагів для прихований -> вихідний шар
-    this.weightsOutput = Array.from({ length: hiddenSize }, () =>
-      Array.from({ length: outputSize }, () => Math.random() * 0.01 - 0.005)
-    );
-    this.biasesOutput = Array.from(
-      { length: outputSize },
-      () => Math.random() * 0.01 - 0.005
-    );
-  }
-
-  // Forward pass
-  predict(inputs: number[]): number[] {
-    // Розрахунок виходів прихованого шару
-    const hiddenOutputs: number[] = this.weightsHidden[0].map((_, j) => {
-      const sum = this.weightsHidden.reduce(
-        (acc, row, i) => acc + row[j] * inputs[i],
-        0
-      );
-      return relu(sum + this.biasesHidden[j]); // Активація прихованого шару
-    });
-
-    // Розрахунок виходів для остаточного шару
-    const outputs: number[] = this.weightsOutput[0].map((_, j) => {
-      const sum = this.weightsOutput.reduce(
-        (acc, row, i) => acc + row[j] * hiddenOutputs[i],
-        0
-      );
-      return relu(sum + this.biasesOutput[j]); // Активація вихідного шару
-    });
-
-    return outputs;
-  }
-
-  // Train with one epoch, given input/output data
-  train(
-    inputs: number[][],
-    targets: number[][],
-    learningRate: number = 0.001
-  ): void {
-    targets.forEach((target, idx) => {
-      const input = inputs[idx];
-
-      // Forward pass (отримання проміжних результатів)
-      const hiddenOutputs: number[] = this.weightsHidden[0].map((_, j) => {
-        const sum = this.weightsHidden.reduce(
-          (acc, row, i) => acc + row[j] * input[i],
-          0
-        );
-        return relu(sum + this.biasesHidden[j]);
-      });
-
-      const predictions: number[] = this.weightsOutput[0].map((_, j) => {
-        const sum = this.weightsOutput.reduce(
-          (acc, row, i) => acc + row[j] * hiddenOutputs[i],
-          0
-        );
-        return relu(sum + this.biasesOutput[j]);
-      });
-
-      // Розрахунок помилки для вихідного шару
-      const outputErrors: number[] = predictions.map(
-        (output, j) => target[j] - output
-      );
-
-      // Оновлення вагів і зсувів для вихідного шару
-      outputErrors.forEach((error, j) => {
-        this.biasesOutput[j] += error * learningRate;
-
-        hiddenOutputs.forEach((hiddenOutput, k) => {
-          this.weightsOutput[k][j] += error * learningRate * hiddenOutput;
-        });
-      });
-
-      // Розрахунок помилки для прихованого шару
-      const hiddenErrors: number[] = this.weightsOutput.map((row, k) =>
-        row.reduce((acc, weight, j) => acc + weight * outputErrors[j], 0)
-      );
-
-      // Оновлення вагів і зсувів для прихованого шару
-      hiddenErrors.forEach((error, j) => {
-        this.biasesHidden[j] += error * learningRate;
-
-        input.forEach((inp, i) => {
-          this.weightsHidden[i][j] += error * learningRate * inp;
-        });
-      });
-    });
-  }
-}
-
-// API Route: Train and Predict AQI
 export async function POST(request: Request) {
   try {
-    const body = await request.json();
-    const { historyData } = body;
+    const body: unknown = await request.json();
+    const historyData =
+      typeof body === "object" && body !== null && "historyData" in body
+        ? body.historyData
+        : undefined;
 
-    if (!historyData || historyData.length < 5) {
-      throw new Error(
-        "Insufficient data for training. At least 5 historical records needed."
+    if (!Array.isArray(historyData)) {
+      return NextResponse.json(
+        { error: "historyData must be an array." },
+        { status: 400 }
       );
     }
 
-    const inputs = historyData.map((entry: any) =>
-      normalizeData([
-        entry.avgPm10,
-        entry.avgPm25,
-        entry.avgPm100,
-        entry.temperature ?? 0,
-        entry.pressure ?? 0,
-        entry.humidity ?? 0,
-      ])
-    );
-    const targets = historyData.map((entry: any) => [entry.aqi]);
+    const observations = historyData.flatMap((entry): Observation[] => {
+      if (typeof entry !== "object" || entry === null) return [];
 
-    const inputSize = inputs[0].length;
-    const hiddenSize = 8; // Кількість нейронів у прихованому шарі (можна експериментувати)
-    const outputSize = 1;
-    const neuralNetwork = new NeuralNetwork(inputSize, hiddenSize, outputSize);
+      const record = entry as { aqi?: unknown; updated?: unknown };
+      if (typeof record.aqi !== "number" || !Number.isFinite(record.aqi)) {
+        return [];
+      }
 
-    // Навчання моделі
-    for (let i = 0; i < 10000; i++) {
-      neuralNetwork.train(inputs, targets, 0.001);
+      return [
+        {
+          aqi: record.aqi,
+          timestamp:
+            typeof record.updated === "string"
+              ? Date.parse(record.updated)
+              : Number.NaN,
+        },
+      ];
+    });
+
+    if (observations.length < 5) {
+      return NextResponse.json(
+        { error: "At least 5 finite AQI records are required." },
+        { status: 400 }
+      );
     }
 
-    // Прогноз для останніх даних
-    const latestFeatures = inputs[inputs.length - 1];
-    const predictedAQI = neuralNetwork.predict(latestFeatures);
+    const hasTimestamps = observations.every((item) =>
+      Number.isFinite(item.timestamp)
+    );
+    if (hasTimestamps) {
+      observations.sort((left, right) => left.timestamp - right.timestamp);
+    }
 
-    return NextResponse.json({ predictedAQI: predictedAQI[0] });
+    const recent = observations.slice(-24);
+    const origin = hasTimestamps ? recent[0].timestamp : 0;
+    const xValues = recent.map((item, index) =>
+      hasTimestamps ? (item.timestamp - origin) / 3_600_000 : index
+    );
+    const yValues = recent.map((item) => item.aqi);
+    const xMean = xValues.reduce((sum, value) => sum + value, 0) / xValues.length;
+    const yMean = yValues.reduce((sum, value) => sum + value, 0) / yValues.length;
+    const variance = xValues.reduce(
+      (sum, value) => sum + (value - xMean) ** 2,
+      0
+    );
+    const covariance = xValues.reduce(
+      (sum, value, index) => sum + (value - xMean) * (yValues[index] - yMean),
+      0
+    );
+    const slope = variance === 0 ? 0 : covariance / variance;
+    const latestX = xValues[xValues.length - 1];
+    const forecast = yMean + slope * (latestX + 24 - xMean);
+
+    if (!Number.isFinite(forecast)) {
+      throw new Error("AQI forecast calculation produced a non-finite result.");
+    }
+
+    return NextResponse.json({
+      predictedAQI: Math.round(Math.max(0, Math.min(500, forecast))),
+    });
   } catch (error) {
     console.error("ERROR:", error);
     return NextResponse.json(

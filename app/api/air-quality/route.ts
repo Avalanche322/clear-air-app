@@ -2,6 +2,8 @@ import { NextResponse, NextRequest } from "next/server";
 
 import connection from "@/app/lib/db";
 
+export const dynamic = "force-dynamic";
+
 export async function GET(request: Request) {
   try {
     const [results] = await connection.query(
@@ -18,7 +20,8 @@ export async function GET(request: Request) {
 		loc.name as station_name,
 		loc.city,
 		loc.lat,
-		loc.lng
+		loc.lng,
+		CASE WHEN loc.city LIKE '%(DEMO)' THEN 'demo' ELSE 'dataset' END as data_source
 		FROM 
 			city_air_quality ca
 		JOIN 

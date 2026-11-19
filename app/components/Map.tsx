@@ -5,9 +5,12 @@ import { Map as MapTilerMap, MapStyle, Language, helpers, ColorRamp, MapMouseEve
 import "@maptiler/sdk/dist/maptiler-sdk.css";
 import "./map.css";
 import {
+  ToggleButton,
+  ToggleButtonGroup,
   useTheme,
 } from "@mui/material";
 import Sidebar from "./Sidebar";
+import { translations, type AppLanguage } from "@/app/lib/i18n";
 
 export const myCustomRamp = new ColorRamp({
   stops: [
@@ -36,6 +39,7 @@ export interface CityData {
   city: string;
   lat: number;
   lng: number;
+  data_source: "demo" | "dataset";
 }
 
 export default function Map() {
@@ -46,8 +50,21 @@ export default function Map() {
   const [cityData, setCityData] = useState<CityData[]>([]);
   const [selectedCity, setSelectedCity] = useState<CityData | null>(null);
   const [currentPosition, setCurrentPosition] = useState<any>();
+  const [mapInstance, setMapInstance] = useState<MapTilerMap | null>(null);
+  const [language, setLanguage] = useState<AppLanguage>(() => {
+    if (typeof window === "undefined") return "uk";
+    return window.localStorage.getItem("clear-air-language") === "en"
+      ? "en"
+      : "uk";
+  });
 
   const theme = useTheme();
+
+  useEffect(() => {
+    window.localStorage.setItem("clear-air-language", language);
+    document.documentElement.lang = language;
+    document.title = translations[language].documentTitle;
+  }, [language]);
 
   const handleSelectedCity = (city: CityData | null) => {
     setSelectedCity(city);
@@ -68,12 +85,13 @@ export default function Map() {
     map.current = new MapTilerMap({
       container: mapContainer.current,
       style: MapStyle.BASIC.DARK,
-      language: Language.LOCAL,
+      language: language === "uk" ? Language.UKRAINIAN : Language.ENGLISH,
       center: [ukraine.lng, ukraine.lat],
       minZoom: zoom,
       maxZoom: 22,
       apiKey: process.env.NEXT_PUBLIC_MAPTILER_KEY,
     });
+    setMapInstance(map.current);
 
     map.current.on("load", () => {
       if (!map.current) return;
@@ -158,17 +176,48 @@ export default function Map() {
         map.current = null;
       }
     };
-  }, [cityData, ukraine.lng, ukraine.lat, zoom, theme]);
+  }, [cityData, language, ukraine.lng, ukraine.lat, zoom, theme]);
 
   return (
     <div className="map-wrap">
       <div ref={mapContainer} className="map" />
+      <ToggleButtonGroup
+        exclusive
+        size="small"
+        value={language}
+        onChange={(_, value: AppLanguage | null) => {
+          if (value) setLanguage(value);
+        }}
+        aria-label={translations[language].language}
+        sx={{
+          position: "absolute",
+          top: 16,
+          right: 16,
+          zIndex: 2,
+          backgroundColor: "background.paper",
+          boxShadow: 2,
+        }}
+      >
+        <ToggleButton
+          value="uk"
+          aria-label={translations[language].languageUkrainian}
+        >
+          УКР
+        </ToggleButton>
+        <ToggleButton
+          value="en"
+          aria-label={translations[language].languageEnglish}
+        >
+          ENG
+        </ToggleButton>
+      </ToggleButtonGroup>
 
       <Sidebar
         selectedCity={selectedCity}
         handleSelectedCity={handleSelectedCity}
-        map={map.current}
+        map={mapInstance}
         currentPosition={currentPosition}
+        language={language}
       />
     </div>
   );

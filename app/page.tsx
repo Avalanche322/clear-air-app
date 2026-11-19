@@ -1,3 +1,5 @@
+"use client";
+
 import dynamic from "next/dynamic";
 import "@maptiler/sdk/dist/maptiler-sdk.css";
 

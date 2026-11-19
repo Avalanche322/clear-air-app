@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Box, Typography, IconButton, List, ListItem, ListItemIcon, ListItemText, Link, Modal, ButtonGroup, Button, Divider, Drawer } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
 import CloudQueueIcon from "@mui/icons-material/CloudQueue";
-import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
+import HelpOutlineIcon from "@mui/icons-material/HelpOutlineOutlined";
 import { styled } from "@mui/system";
 import { CityData, myCustomRamp } from "./Map";
 import theme from "../theme";
@@ -11,46 +11,24 @@ import jsPDF from "jspdf";
 import "jspdf-autotable";
 import autoTable, { RowInput } from "jspdf-autotable";
 import { Download, Thermostat, WaterDrop } from "@mui/icons-material";
+import { translations, type AppLanguage } from "@/app/lib/i18n";
 
 
-function getAQIAdvice(aqi: number) {
+function getAQIAdvice(aqi: number, language: AppLanguage) {
+  const advice = translations[language].advice;
+
   if (aqi >= 0 && aqi <= 50) {
-    return {
-      level: "Повітря чисте 😁",
-      advice:
-        "Якість повітря в нормі, немає жодних ризиків для здоров'я.",
-    };
+    return advice.good;
   } else if (aqi > 50 && aqi <= 100) {
-    return {
-      level: "Повітря прийнятне 🙂",
-      advice:
-        "Якість повітря прийнятна, але для деяких чутливих людей можуть виникнути легкі проблеми зі здоров'ям.",
-    };
+    return advice.acceptable;
   } else if (aqi > 100 && aqi <= 150) {
-    return {
-      level: "Повітря нездорове для чутливих 😕",
-      advice:
-        "Люди з респіраторними захворюваннями, діти та люди похилого віку можуть відчути негативний вплив на здоров'я.",
-    };
+    return advice.sensitive;
   } else if (aqi > 150 && aqi <= 200) {
-    return {
-      level: "Повітря нездорове 😷",
-      advice:
-        "Можливі серйозні проблеми зі здоров'ям у всього населення, особливо для тих, хто має захворювання дихальних шляхів.",
-    };
-  } else if (aqi > 200) {
-    return {
-      level: "Повітря дуже нездорове 😨",
-      advice:
-        "Ризик серйозного впливу на здоров'я для всіх.",
-    };
-  } else {
-    return {
-      level: "Невідомий рівень ❓",
-      advice:
-        "Неправильне значення AQI. Будь ласка, введіть дійсний індекс якості повітря.",
-    };
+    return advice.unhealthy;
   }
+
+  if (aqi > 200) return advice.veryUnhealthy;
+  return advice.unknown;
 }
 
 function getPollutionComposition(data: any) {
@@ -66,19 +44,13 @@ function getPollutionComposition(data: any) {
   return result;
 }
 
-function formatDate(dateString: string) {
+function formatDate(dateString: string, language: AppLanguage) {
   const date = new Date(dateString);
-
-  // Extract day, month, year, hours, and minutes
-  const day = String(date.getDate()).padStart(2, "0");
-  const month = String(date.getMonth() + 1).padStart(2, "0"); // Months are 0-based
-  const year = date.getFullYear();
-
-  const hours = String(date.getHours()).padStart(2, "0");
-  const minutes = String(date.getMinutes()).padStart(2, "0");
-
-  // Return formatted date and time
-  return `${day}.${month}.${year} ${hours}:${minutes}`;
+  const locale = language === "uk" ? "uk-UA" : "en-US";
+  return new Intl.DateTimeFormat(locale, {
+    dateStyle: "short",
+    timeStyle: "short",
+  }).format(date);
 }
 
 function generatePDF(data: { hours: any[]; month: any[] }) {
@@ -110,7 +82,7 @@ function generatePDF(data: { hours: any[]; month: any[] }) {
     item.avgPm100.toFixed(3) ?? "N/A",
     item.humidity ?? "N/A",
     item.pressure ?? "N/A",
-    formatDate(item.updated),
+    formatDate(item.updated, "en"),
     item.lat.toFixed(3) ?? "N/A",
     item.lng.toFixed(3) ?? "N/A",
   ]);
@@ -152,7 +124,7 @@ function generatePDF(data: { hours: any[]; month: any[] }) {
     item.avgPm100.toFixed(3) ?? "N/A",
     item.humidity ?? "N/A",
     item.pressure ?? "N/A",
-    formatDate(item.updated),
+    formatDate(item.updated, "en"),
     item.lat.toFixed(3) ?? "N/A",
     item.lng.toFixed(3) ?? "N/A",
   ]);
@@ -191,38 +163,26 @@ const aqiLevels = [
   {
     range: "0–50",
     color: "#66bb6a", // Green
-    description:
-      "Повітря чисте. Можна провітрювати, активно проводити час просто неба.",
   },
   {
     range: "51–100",
     color: "#ffeb3b", // Yellow
-    description:
-      "Повітря прийнятне. Не варто хвилюватися, це нормальний показник.",
   },
   {
     range: "101–150",
     color: "#ff9800", // Orange
-    description:
-      "Повітря нездорове для чутливих людей. Обмежте активність на вулиці.",
   },
   {
     range: "151–200",
     color: "#f44336", // Red
-    description:
-      "Повітря нездорове. Відмовтесь від прогулянок, закрийте вікна.",
   },
   {
     range: "201–300",
     color: "#9c27b0", // Purple
-    description:
-      "Повітря дуже нездорове. Закривайте вікна та ввімкніть очищувач повітря.",
   },
   {
     range: "301+",
     color: "#4a148c", // Maroon
-    description:
-      "Повітря небезпечне. Бережіть себе, увімкніть очищувач чи зволожувач повітря.",
   },
 ];
 
@@ -251,12 +211,15 @@ const Sidebar = ({
   handleSelectedCity,
   map,
   currentPosition,
+  language,
 }: {
   selectedCity: CityData | null;
   handleSelectedCity: (city: CityData | null) => void;
   map: any;
   currentPosition: any;
+  language: AppLanguage;
 }) => {
+  const t = translations[language];
 	const [openAqiModal, setOpenAqiModal] = useState(false);
 	const [openPmModal, setOpenPmModal] = useState(false);
 	const [history, setHistory] = useState<{
@@ -268,6 +231,8 @@ const Sidebar = ({
 
 	useEffect(() => {
     async function fetchData() {
+      setHistory(null);
+      setPredictAQI(null);
       const res = await fetch(`/api/air-quality/history/${selectedCity?.station_name}`);
       const data = await res.json();
       setHistory(data);
@@ -290,11 +255,21 @@ const Sidebar = ({
     });
 
     const data = await response.json();
-	 console.log("predictAQI", data);
+    if (
+      !response.ok ||
+      typeof data.predictedAQI !== "number" ||
+      !Number.isFinite(data.predictedAQI)
+    ) {
+      console.error("AQI forecast failed:", data.error ?? "Invalid forecast response.");
+      setPredictAQI(null);
+      return;
+    }
     setPredictAQI(data.predictedAQI);
   }
-    if (history && (history.hours.length > 0 || history.month.length > 0)) {
-      fetchPredictAQI([...history.hours, ...history.month]);
+    if (history && history.hours.length >= 5) {
+      fetchPredictAQI(history.hours.slice(-24));
+    } else if (history && history.month.length >= 5) {
+      fetchPredictAQI(history.month.slice(-24));
     }
   }, [history]);
 
@@ -307,7 +282,16 @@ const Sidebar = ({
       map.flyTo(currentPosition);
     };
 
-  const { aqi, station_name, updated, city, temperature, pressure } = selectedCity;
+  const {
+    aqi,
+    station_name,
+    updated,
+    city,
+    temperature,
+    pressure,
+    data_source,
+  } = selectedCity;
+  const aqiAdvice = getAQIAdvice(aqi, language);
 
   return (
     <Drawer
@@ -334,10 +318,12 @@ const Sidebar = ({
               justifyContent: "center",
             }}
           >
-            <Typography variant="h6">Станція №{station_name}</Typography>
+            <Typography variant="h6">
+              {t.station} №{station_name}
+            </Typography>
             <IconButton
               size="large"
-              aria-label="close"
+              aria-label={t.close}
               onClick={handleOnClose}
               sx={{ position: "absolute", top: 0, right: 0 }}
             >
@@ -379,10 +365,10 @@ const Sidebar = ({
             }}
           >
             <Box sx={{ display: "flex", alignItems: "baseline", gap: "10px" }}>
-              <Typography variant="h2" fontWeight={500}>
+              <Typography variant="h2" sx={{ fontWeight: 500 }}>
                 {aqi}
               </Typography>
-              <Typography variant="h4" fontWeight={500}>
+              <Typography variant="h4" sx={{ fontWeight: 500 }}>
                 AQI
               </Typography>
             </Box>
@@ -411,12 +397,12 @@ const Sidebar = ({
           }}
         >
           <Typography variant="h6" sx={{ marginBottom: "8px" }}>
-            {getAQIAdvice(aqi).level}
+            {aqiAdvice.level}
           </Typography>
-          <Typography>{getAQIAdvice(aqi).advice}</Typography>
+          <Typography>{aqiAdvice.text}</Typography>
         </Box>
 
-        {predictAQI ? (
+        {predictAQI !== null ? (
           <Box
             sx={{
               border: `solid 1px ${theme.palette.grey[600]}`,
@@ -431,10 +417,10 @@ const Sidebar = ({
               variant="h6"
               sx={{ marginBottom: "8px", fontWeight: "bold" }}
             >
-              Прогноз на 24 години
+              {t.forecast}
             </Typography>
             <Typography sx={{ marginBottom: "4px" }}>
-              значення AQI {Math.round(predictAQI)}
+              {t.aqiValue} {Math.round(predictAQI)}
             </Typography>
             <Divider
               sx={{ borderColor: theme.palette.grey[500], marginY: "8px" }}
@@ -443,7 +429,8 @@ const Sidebar = ({
               variant="body2"
               sx={{ fontStyle: "italic", color: theme.palette.text.secondary }}
             >
-              Рекомендація: {getAQIAdvice(Math.round(predictAQI)).advice}
+              {t.recommendation}:{" "}
+              {getAQIAdvice(Math.round(predictAQI), language).text}
             </Typography>
           </Box>
         ) : (
@@ -458,7 +445,7 @@ const Sidebar = ({
             }}
           >
             <Typography variant="h6" sx={{ marginBottom: "8px" }}>
-              Ми не можемо визначити прогнозований AQI 😕
+              {t.noForecast}
             </Typography>
           </Box>
         )}
@@ -473,7 +460,7 @@ const Sidebar = ({
           }}
         >
           <Typography variant="h6" sx={{ marginBottom: "8px" }}>
-            Склад забруднення
+            {t.pollutionComposition}
           </Typography>
           {getPollutionComposition(selectedCity).map((data) => (
             <Box
@@ -500,7 +487,7 @@ const Sidebar = ({
                 <CloudQueueIcon />
                 {data.label}
               </Link>
-              <Typography>{`${data.value} мкг/м3`}</Typography>
+              <Typography>{`${data.value} µg/m³`}</Typography>
             </Box>
           ))}
         </Box>
@@ -516,11 +503,18 @@ const Sidebar = ({
           }}
         >
           <Typography variant="h6" sx={{ marginBottom: "8px" }}>
-            Додаткова інформація
+            {t.additionalInfo}
           </Typography>
-          <Typography>Дані за - {formatDate(updated)}</Typography>
-          <Typography>Місто - {city}</Typography>
-          <Typography>Джерело даних - Мої дані 😛</Typography>
+          <Typography>
+            {t.dataAs}: {formatDate(updated, language)}
+          </Typography>
+          <Typography>
+            {t.city}: {city}
+          </Typography>
+          <Typography>
+            {t.dataSource}:{" "}
+            {data_source === "demo" ? t.demoDataName : t.dataSourceName}
+          </Typography>
           <Button
             variant="contained"
             size="small"
@@ -528,7 +522,7 @@ const Sidebar = ({
             startIcon={<Download />}
             onClick={() => generatePDF(history)}
           >
-            Download PDF
+            {t.downloadPdf}
           </Button>
         </Box>
         <Box
@@ -546,10 +540,10 @@ const Sidebar = ({
         >
           <ButtonGroup size="small">
             <Button onClick={() => setSelectedHistory(history.hours)}>
-              48 г
+              {t.last48Hours}
             </Button>
             <Button onClick={() => setSelectedHistory(history.month)}>
-              30 дн
+              {t.last30Days}
             </Button>
           </ButtonGroup>
           <BarChart
@@ -558,7 +552,7 @@ const Sidebar = ({
               {
                 scaleType: "band",
                 dataKey: "updated",
-                valueFormatter: (v) => formatDate(String(v)),
+                valueFormatter: (v) => formatDate(String(v), language),
               },
             ]}
             series={[
@@ -591,16 +585,13 @@ const Sidebar = ({
           }}
         >
           <Typography variant="h6" component="h2">
-            Що таке AQI?
+            {t.whatIsAqi}
           </Typography>
           <Typography sx={{ marginTop: 2 }}>
-            AQI (Air Quality Index) – індекс якості повітря, що розроблений
-            Агенцією з охорони довкілля США і використовується у багатьох
-            країнах світу. Чим більше значення AQI, тим вищий рівень забруднення
-            повітря і негативніший плив на здоровя.
+            {t.aqiDefinition}
           </Typography>
           <List>
-            {aqiLevels.map((level) => (
+            {aqiLevels.map((level, index) => (
               <ListItem key={level.range} disablePadding>
                 <ListItemIcon
                   sx={{
@@ -615,7 +606,7 @@ const Sidebar = ({
                 >
                   {level.range}
                 </ListItemIcon>
-                <ListItemText primary={level.description} />
+                <ListItemText primary={t.aqiLevels[index]} />
               </ListItem>
             ))}
           </List>
@@ -640,21 +631,13 @@ const Sidebar = ({
           }}
         >
           <Typography variant="h6" component="h2">
-            Що таке PM?
+            {t.whatIsPm}
           </Typography>
-          <Typography sx={{ marginTop: 2 }}>
-            PM1, PM2.5, PM10 - тверді частки, particulate matter, розміром до 10
-            мікронів. Вони такі малі, що непомітні неозброєним оком.
-          </Typography>
-          <Typography sx={{ marginTop: 2 }}>
-            Серед джерел наддрібних часток - автотранспорт, промисловість,
-            пожежі.
-          </Typography>
-          <Typography sx={{ marginTop: 2 }}>
-            PMи можуть проникати у наші легені, кров й негативно впливати на
-            серце, мозок, дихальну систему. Всесвітня організація охорони
-            здоровʼя приділяє цим часткам особливу увагу.
-          </Typography>
+          {t.pmDefinition.map((paragraph) => (
+            <Typography key={paragraph} sx={{ marginTop: 2 }}>
+              {paragraph}
+            </Typography>
+          ))}
         </Box>
       </Modal>
     </Drawer>
